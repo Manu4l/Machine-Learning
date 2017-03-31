@@ -1,0 +1,110 @@
+---
+title: "ML - Course Assignment"
+author: "Manuel"
+date: "28 März 2017"
+output: html_document
+---
+
+
+# Goal
+
+The goal of this project is to predict exercise execution by incorporating machine learning. 6 participants were asked to perform exercises either correctly (class: A) or with mistakes (classes: B, C, D, E). Each participant was equipped with several accelerometers that made measurements while they performed the exercises.
+
+## 1. Loading packages and training data.
+
+```{r, message=FALSE, warning=FALSE}
+library(plyr)
+library(tidyverse)
+library(caret)
+library(readr)
+library(corrplot)
+
+pml_training <- read_csv("H:/Kurse/DataScience/MachineLearning/Assignment1/pml-training.csv")
+pml_testing <- read_csv("H:/Kurse/DataScience/MachineLearning/Assignment1/pml-testing.csv")
+
+```
+
+## 2. Data cleaning
+
+We remove columns that are not needed, especially those where the variance is near zero. We also plot a correlation matrix.
+
+```{r}
+
+pml_training <- select(pml_training, 2:160)
+
+NZV <- nearZeroVar(pml_training)
+pml_training <- pml_training[, -NZV]
+
+NAS <- sapply(pml_training, function(x) mean(is.na(x))) > 0.95
+pml_training <- pml_training[, NAS==FALSE]
+
+pml_training1 <- select(pml_training, 5:58)
+pml_training1 <- na.exclude(pml_training1)
+
+corMatrix <- cor(pml_training1[,-54])
+corrplot(corMatrix, order = "FPC", method = "color", type = "lower", tl.cex = 0.6, tl.col = "black")
+```
+
+Dark colors indicate correlation (see right diagonal for perfect correlation between the same parameters). There are only a few darks, no further pre-processing will be conducted.
+
+## 3. Setting up the cross validation parameters
+
+We divide the training data into 4 random parts (= number), where 3 will be used to train the model and 1 will be used to test the model. This will be done until each part was used for train and test. This will be repeated 2 times ( = repeats), so the 4 parts will differ in their composition between the 2 repeats.
+
+```{r}
+
+fitControl <- trainControl(
+  method = "repeatedcv",
+  number = 4,
+  repeats = 2)
+
+```
+
+## 4. Setting up the models
+
+Based on the lecture we choose a gradient boosting algorithm first. They normally offer good accuracy and don't take too long.
+
+```{r, results="hide", message=FALSE, warning=FALSE, cache=TRUE}
+
+gbm <- train(classe ~ ., data = pml_training, 
+               method = "gbm", 
+               trControl = fitControl,
+               na.action = na.pass,
+               verbose = FALSE)
+
+```
+
+```{r}
+
+gbm
+
+```
+The accuracy for the gbm model is 0.997, while the out of sample error rate is below 1%.
+Based on their popularity, good performance and ease of us, We choose a random forest algorithm for the second model.
+
+```{r, results="hide", message=FALSE, warning=FALSE, cache=TRUE}
+
+rf <- train(classe ~ ., data = pml_training1, 
+               method = "rf", 
+               trControl = fitControl)
+
+```
+```{r}
+
+rf
+
+```
+
+The random forest model is even slightly better (accuracy: 0.998), than the generalized boosted model, it took longer, however. 
+
+## 5. Prediction
+Finally we use our best model (rf) to predict the test cases.
+
+
+```{r}
+
+pred <- predict(rf, newdata=pml_testing)
+print(pred)
+
+```
+
